@@ -277,6 +277,7 @@ void startSelectedGame() {
 void playReactionGame() {
   static int gamePhase = 0;
   static unsigned long phaseStartTime = 0;
+  static unsigned long phaseDelay = 0;  // Store the target delay
   static unsigned long greenLightTime = 0;
   static bool roundWon = false;
   static bool greenLightActive = false;
@@ -316,6 +317,7 @@ void playReactionGame() {
 
     setRGB(255, 0, 0);
     phaseStartTime = millis();
+    phaseDelay = random(1500, 2500);  // Store delay for red phase
     gamePhase = 1;
     roundWon = false;
     greenLightActive = false;
@@ -323,9 +325,10 @@ void playReactionGame() {
   }
   else if (gamePhase == 1) {
     // Red light
-    if (millis() - phaseStartTime > random(1500, 2500)) {
+    if (millis() - phaseStartTime > phaseDelay) {
       setRGB(255, 255, 0);
       phaseStartTime = millis();
+      phaseDelay = random(800, 1500);  // Store delay for yellow phase
       gamePhase = 2;
     } else if (p1NewPress || p2NewPress) {
       // Only check for false start if we haven't changed phase yet
@@ -335,7 +338,7 @@ void playReactionGame() {
   }
   else if (gamePhase == 2) {
     // Yellow light
-    if (millis() - phaseStartTime > random(800, 1500)) {
+    if (millis() - phaseStartTime > phaseDelay) {
       setRGB(0, 255, 0);
       greenLightTime = millis();
       greenLightActive = true;
