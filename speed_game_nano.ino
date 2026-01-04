@@ -1,6 +1,6 @@
 /*
- * Speed Game - Two Player Arduino Game
- * Hardware: Arduino Nano Every, 2x I2C 128x64 LCD (GME12864-11), RGB LED, 2x Push Buttons
+ * Speed Game - Horizontal Split Screen Edition
+ * Top half = You, Bottom half = Opponent, divided by line
  */
 
 #include <Wire.h>
@@ -21,51 +21,56 @@ const int LCD_ADDR_P2 = 0x3D;
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C lcd1(U8G2_R0, U8X8_PIN_NONE);
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C lcd2(U8G2_R0, U8X8_PIN_NONE);
 
-// Win feedback (positive, 2-4 words)
+// Win feedback (short, clean fonts)
 const char* winMessages[] = {
-  "LEGENDARY!", "ON FIRE!", "UNSTOPPABLE!", "BEAST MODE!", "CRUSHING IT!",
-  "LIGHTNING FAST!", "DOMINATING!", "FLAWLESS!", "GODLIKE!", "INCREDIBLE!",
-  "MONSTER!", "SAVAGE!", "INSANE!", "PERFECT!", "SUPREME!",
-  "CLUTCH MASTER!", "TOO FAST!", "UNTOUCHABLE!", "RUTHLESS!", "BLAZING!",
-  "SUPERHUMAN!", "KILLING IT!", "PHENOMENON!", "CHAMPION!", "ELITE!",
-  "MASTERCLASS!", "POWERHOUSE!", "NUCLEAR!", "LEGENDARY!", "OUTSTANDING!",
-  "WORLD CLASS!", "UNREAL!", "SPECTACULAR!", "MAGNIFICENT!", "BRILLIANT!",
-  "STUNNING!", "PHENOMENAL!", "EXTRAORDINARY!", "SENSATIONAL!", "REMARKABLE!",
-  "ANNIHILATING!", "DECIMATING!", "OBLITERATING!", "VAPORIZING!", "WRECKING!",
-  "DESTROYING!", "MURDERING!", "SLAYING!", "BULLDOZING!", "STEAMROLLING!"
+  "BEAST", "FIRE", "INSANE", "SAVAGE", "GODLY",
+  "ELITE", "LEGEND", "CLUTCH", "PERFECT", "MONSTER",
+  "SICK", "NASTY", "NUCLEAR", "FLAWLESS", "EPIC",
+  "SUPREME", "CRUSHING", "RUTHLESS", "DEADLY", "KILLING",
+  "UNSTOP", "BLAZING", "DEMON", "KING", "GOAT",
+  "CRACKED", "CHAMP", "ACE", "BOSS", "ALPHA",
+  "APEX", "ON FIRE", "TOO GOOD", "BUILT", "HIM"
 };
 
-// Lose feedback (rude, 1-2 words)
+// Lose feedback (BRUTAL)
 const char* loseMessages[] = {
-  "PATHETIC", "TRASH", "GARBAGE", "WEAK", "SCRUB",
-  "EMBARRASSING", "USELESS", "TERRIBLE", "AWFUL", "HOPELESS",
-  "SAD", "PITIFUL", "LAUGHABLE", "FAIL", "YIKES",
-  "DISASTER", "JOKE", "CLOWN", "ROOKIE", "NOOB",
-  "SHAMEFUL", "BRUTAL", "ROUGH", "OUCH", "WRECKED",
-  "DESTROYED", "CRUSHED", "SMOKED", "OWNED", "DOMINATED",
-  "BODIED", "TOASTED", "FRIED", "COOKED", "BURNT",
-  "CHOKE ARTIST", "TOO SLOW", "BOZO", "CLOWN SHOW", "FUMBLED",
-  "WASHED UP", "WASHED", "DONE", "FINISHED", "EXPOSED",
-  "FIGURED OUT", "PREDICTABLE", "BASIC", "MID", "FRAUDULENT"
+  "TRASH", "GARBAGE", "PATHETIC", "WEAK", "SCRUB",
+  "AWFUL", "TERRIBLE", "USELESS", "HOPELESS", "SAD",
+  "SHAMEFUL", "DISASTER", "JOKE", "CLOWN", "NOOB",
+  "WRECKED", "DESTROYED", "OWNED", "BODIED", "SMOKED",
+  "FRIED", "COOKED", "BURNT", "TOASTED", "ROASTED",
+  "CHOKED", "FUMBLED", "EXPOSED", "FINISHED", "DONE",
+  "WASHED", "MID", "BASIC", "BOT", "NPC",
+  "GET GOOD", "QUIT", "UNINSTALL", "DELETE", "RETIRE",
+  "YIKES", "CRINGE", "L BOZO", "RATIO", "CRY",
+  "COPE", "SEETHE", "MAD?", "TILTED", "BRONZE",
+  "PLASTIC", "HARDSTUCK", "STUCK", "SKILL GAP", "DOG",
+  "BOT DIFF", "GAPPED", "DIFF", "FREE", "EZ",
+  "TOO EZ", "EASY", "NO CHANCE", "CHILD", "BABY",
+  "SLOW", "TURTLE", "SNAIL", "FROZEN", "BLIND",
+  "ASLEEP", "AFK", "LUCKY", "CARRIED", "BOOSTED",
+  "SIT DOWN", "PIPE DOWN", "QUIET", "HUSH", "SILENCE",
+  "TOUCH GRASS", "GO OUTSIDE", "QUIT NOW", "REFUND", "BROKEN",
+  "DAMAGED", "BUSTED", "FAULTY", "FAKE", "PHONY",
+  "PRETENDER", "IMPOSTER", "READABLE", "OBVIOUS", "SEEN",
+  "ONE-TRICK", "LUCK", "FLUKE", "ACCIDENT", "WASHED UP",
+  "PAST PRIME", "OLD", "DUSTY", "ANCIENT", "PAYCHECK"
 };
 
 const int WIN_MSG_COUNT = sizeof(winMessages) / sizeof(winMessages[0]);
 const int LOSE_MSG_COUNT = sizeof(loseMessages) / sizeof(loseMessages[0]);
 
-// Game States
 enum GameState {
   MENU, GAME_REACTION, GAME_BUTTON_MASH, GAME_REFLEX, GAME_SPEED_MATCH, GAME_OVER
 };
 
 GameState currentState = MENU;
 
-// Menu System
 const int MENU_ITEMS = 4;
 int selectedMenuItem = 0;
 unsigned long menuStartTime = 0;
 const unsigned long MENU_TIMEOUT = 10000;
 
-// Button Debouncing
 unsigned long lastP1Press = 0;
 unsigned long lastP2Press = 0;
 unsigned long lastP1Click = 0;
@@ -74,11 +79,10 @@ const unsigned long DOUBLE_CLICK_TIME = 400;
 bool p1Pressed = false;
 bool p2Pressed = false;
 
-// Game Variables
 int scoreP1 = 0;
 int scoreP2 = 0;
 int currentRound = 1;
-const int MAX_ROUNDS = 5;
+const int MAX_ROUNDS = 10; // Best of 10 for React
 
 void setRGB(int r, int g, int b) {
   analogWrite(LED_RED, r);
@@ -92,23 +96,17 @@ void initDisplay(U8G2_SSD1306_128X64_NONAME_F_HW_I2C &display, uint8_t address) 
   display.setContrast(128);
 }
 
-void drawCenteredText(U8G2_SSD1306_128X64_NONAME_F_HW_I2C &display, int y, const char* text) {
-  int width = display.getStrWidth(text);
-  display.drawStr((128 - width) / 2, y, text);
+// Draw horizontal divider line at y=32
+void drawDivider(U8G2_SSD1306_128X64_NONAME_F_HW_I2C &disp) {
+  disp.drawHLine(0, 32, 128);
 }
 
-void drawProgressBars(U8G2_SSD1306_128X64_NONAME_F_HW_I2C &disp, int val1, int val2, int maxVal) {
-  // P1 bar (top)
-  disp.drawStr(0, 10, "P1");
-  disp.drawFrame(20, 2, 108, 10);
-  int bar1 = map(val1, 0, maxVal, 0, 104);
-  disp.drawBox(22, 4, bar1, 6);
-
-  // P2 bar (bottom)
-  disp.drawStr(0, 25, "P2");
-  disp.drawFrame(20, 17, 108, 10);
-  int bar2 = map(val2, 0, maxVal, 0, 104);
-  disp.drawBox(22, 19, bar2, 6);
+// Draw centered text in top or bottom half
+void drawCenteredInHalf(U8G2_SSD1306_128X64_NONAME_F_HW_I2C &disp, int y, const char* text, bool topHalf) {
+  int width = disp.getStrWidth(text);
+  int x = (128 - width) / 2;
+  if (!topHalf) y += 33; // Shift to bottom half
+  disp.drawStr(x, y, text);
 }
 
 void setup() {
@@ -123,20 +121,24 @@ void setup() {
 
   setRGB(128, 0, 128);
 
+  // Welcome - P1 screen
   lcd1.clearBuffer();
-  lcd1.setFont(u8g2_font_fur17_tr);
-  drawCenteredText(lcd1, 30, "SPEED");
-  drawCenteredText(lcd1, 50, "GAME!");
-  lcd1.setFont(u8g2_font_9x15_tr);
-  drawCenteredText(lcd1, 63, "Player 1");
+  lcd1.setFont(u8g2_font_helvB14_tr);
+  drawCenteredInHalf(lcd1, 12, "SPEED", true);
+  drawCenteredInHalf(lcd1, 28, "GAME", true);
+  drawDivider(lcd1);
+  lcd1.setFont(u8g2_font_6x12_tr);
+  drawCenteredInHalf(lcd1, 12, "Player 1", false);
   lcd1.sendBuffer();
 
+  // Welcome - P2 screen
   lcd2.clearBuffer();
-  lcd2.setFont(u8g2_font_fur17_tr);
-  drawCenteredText(lcd2, 30, "SPEED");
-  drawCenteredText(lcd2, 50, "GAME!");
-  lcd2.setFont(u8g2_font_9x15_tr);
-  drawCenteredText(lcd2, 63, "Player 2");
+  lcd2.setFont(u8g2_font_helvB14_tr);
+  drawCenteredInHalf(lcd2, 12, "SPEED", true);
+  drawCenteredInHalf(lcd2, 28, "GAME", true);
+  drawDivider(lcd2);
+  lcd2.setFont(u8g2_font_6x12_tr);
+  drawCenteredInHalf(lcd2, 12, "Player 2", false);
   lcd2.sendBuffer();
 
   delay(2000);
@@ -181,16 +183,25 @@ void showMenu() {
   const char* menuItems[MENU_ITEMS] = {"Reaction", "Button Mash", "Reflex", "Speed Match"};
 
   lcd1.clearBuffer();
-  lcd1.setFont(u8g2_font_9x15_tr);
-  lcd1.drawStr(0, 12, "SELECT GAME:");
-  lcd1.setFont(u8g2_font_fur14_tr);
-  drawCenteredText(lcd1, 40, menuItems[selectedMenuItem]);
+  lcd1.setFont(u8g2_font_6x12_tr);
+  lcd1.drawStr(0, 8, "SELECT:");
+  lcd1.setFont(u8g2_font_helvB10_tr);
+  drawCenteredInHalf(lcd1, 24, menuItems[selectedMenuItem], true);
+  drawDivider(lcd1);
+  lcd1.setFont(u8g2_font_6x10_tr);
+  lcd1.drawStr(0, 42, "Click: Next");
+  lcd1.drawStr(0, 54, "2xClick: Start");
   lcd1.sendBuffer();
 
   lcd2.clearBuffer();
-  lcd2.setFont(u8g2_font_9x15_tr);
-  lcd2.drawStr(0, 12, "P1:Click=Next");
-  lcd2.drawStr(0, 28, "DblClick=Start");
+  lcd2.setFont(u8g2_font_6x12_tr);
+  lcd2.drawStr(0, 8, "SELECT:");
+  lcd2.setFont(u8g2_font_helvB10_tr);
+  drawCenteredInHalf(lcd2, 24, menuItems[selectedMenuItem], true);
+  drawDivider(lcd2);
+  lcd2.setFont(u8g2_font_6x10_tr);
+  lcd2.drawStr(0, 42, "P1 Controls");
+  lcd2.drawStr(0, 54, "the Menu");
   lcd2.sendBuffer();
 
   setRGB(0, 0, 255);
@@ -209,14 +220,20 @@ void handleMenu() {
   if (now - lastBarUpdate > 100) {
     lastBarUpdate = now;
 
-    lcd2.clearBuffer();
-    lcd2.setFont(u8g2_font_9x15_tr);
-    lcd2.drawStr(0, 12, "P1:Click=Next");
-    lcd2.drawStr(0, 28, "DblClick=Start");
-
+    // Update time bar
     int barWidth = map(elapsed, 0, MENU_TIMEOUT, 120, 0);
-    lcd2.drawFrame(4, 45, 120, 12);
-    lcd2.drawBox(6, 47, barWidth, 8);
+
+    lcd2.clearBuffer();
+    lcd2.setFont(u8g2_font_6x12_tr);
+    lcd2.drawStr(0, 8, "SELECT:");
+    lcd2.setFont(u8g2_font_helvB10_tr);
+    drawCenteredInHalf(lcd2, 24, menuItems[selectedMenuItem], true);
+    drawDivider(lcd2);
+    lcd2.setFont(u8g2_font_6x10_tr);
+    lcd2.drawStr(0, 42, "P1 Controls");
+    lcd2.drawStr(0, 54, "the Menu");
+    lcd2.drawFrame(4, 57, 120, 6);
+    lcd2.drawBox(6, 59, barWidth, 2);
     lcd2.sendBuffer();
   }
 
@@ -253,37 +270,51 @@ void playReactionGame() {
   static unsigned long phaseStartTime = 0;
   static unsigned long greenLightTime = 0;
   static bool roundWon = false;
+  static bool greenLightActive = false;
 
   if (gamePhase == 0) {
+    // Show round info
     lcd1.clearBuffer();
     lcd2.clearBuffer();
-    lcd1.setFont(u8g2_font_fur20_tr);
-    lcd2.setFont(u8g2_font_fur20_tr);
-    drawCenteredText(lcd1, 28, "REACT!");
-    drawCenteredText(lcd2, 28, "REACT!");
 
-    lcd1.setFont(u8g2_font_9x15_tr);
-    lcd2.setFont(u8g2_font_9x15_tr);
+    lcd1.setFont(u8g2_font_helvB10_tr);
+    drawCenteredInHalf(lcd1, 10, "REACT!", true);
+    lcd1.setFont(u8g2_font_6x10_tr);
     char buf[16];
     sprintf(buf, "Round %d/%d", currentRound, MAX_ROUNDS);
-    drawCenteredText(lcd1, 45, buf);
-    drawCenteredText(lcd2, 45, "Wait for");
-    drawCenteredText(lcd2, 60, "GREEN!");
-
-    // Progress bars
-    drawProgressBars(lcd1, scoreP1, scoreP2, MAX_ROUNDS);
-    drawProgressBars(lcd2, scoreP1, scoreP2, MAX_ROUNDS);
-
+    drawCenteredInHalf(lcd1, 24, buf, true);
+    drawDivider(lcd1);
+    lcd1.setFont(u8g2_font_6x10_tr);
+    lcd1.drawStr(0, 42, "You:");
+    lcd1.drawStr(40, 42, itoa(scoreP1, buf, 10));
+    lcd1.drawStr(0, 54, "Them:");
+    lcd1.drawStr(40, 54, itoa(scoreP2, buf, 10));
     lcd1.sendBuffer();
+
+    lcd2.clearBuffer();
+    lcd2.setFont(u8g2_font_helvB10_tr);
+    drawCenteredInHalf(lcd2, 10, "REACT!", true);
+    lcd2.setFont(u8g2_font_6x10_tr);
+    sprintf(buf, "Round %d/%d", currentRound, MAX_ROUNDS);
+    drawCenteredInHalf(lcd2, 24, buf, true);
+    drawDivider(lcd2);
+    lcd2.setFont(u8g2_font_6x10_tr);
+    lcd2.drawStr(0, 42, "You:");
+    lcd2.drawStr(40, 42, itoa(scoreP2, buf, 10));
+    lcd2.drawStr(0, 54, "Them:");
+    lcd2.drawStr(40, 54, itoa(scoreP1, buf, 10));
     lcd2.sendBuffer();
 
     setRGB(255, 0, 0);
     phaseStartTime = millis();
     gamePhase = 1;
     roundWon = false;
+    greenLightActive = false;
+    delay(500);
   }
   else if (gamePhase == 1) {
-    if (millis() - phaseStartTime > random(1000, 2000)) {
+    // Red light
+    if (millis() - phaseStartTime > random(1500, 2500)) {
       setRGB(255, 255, 0);
       phaseStartTime = millis();
       gamePhase = 2;
@@ -294,11 +325,13 @@ void playReactionGame() {
     }
   }
   else if (gamePhase == 2) {
-    if (millis() - phaseStartTime > random(500, 1500)) {
+    // Yellow light
+    if (millis() - phaseStartTime > random(800, 1500)) {
       setRGB(0, 255, 0);
       greenLightTime = millis();
-      phaseStartTime = millis();
+      greenLightActive = true; // Flag that green is NOW active
       gamePhase = 3;
+      delay(10); // Small delay to ensure green is SET before checking buttons
     }
     if (p1Pressed || p2Pressed) {
       handleFalseStart();
@@ -306,29 +339,35 @@ void playReactionGame() {
     }
   }
   else if (gamePhase == 3) {
-    if (!roundWon) {
-      if (p1Pressed && (millis() - lastP1Press < 100)) {
-        scoreP1++;
-        showReactionWinner(1, millis() - greenLightTime);
-        roundWon = true;
-        gamePhase = 4;
-      }
-      else if (p2Pressed && (millis() - lastP2Press < 100)) {
-        scoreP2++;
-        showReactionWinner(2, millis() - greenLightTime);
-        roundWon = true;
-        gamePhase = 4;
+    // Green light - ONLY check buttons if green is active AND some time has passed
+    if (!roundWon && greenLightActive) {
+      unsigned long timeSinceGreen = millis() - greenLightTime;
+
+      // Only start accepting presses after 50ms to avoid false triggers
+      if (timeSinceGreen > 50) {
+        if (p1Pressed && (millis() - lastP1Press < 100)) {
+          scoreP1++;
+          showReactionWinner(1, timeSinceGreen);
+          roundWon = true;
+          gamePhase = 4;
+        }
+        else if (p2Pressed && (millis() - lastP2Press < 100)) {
+          scoreP2++;
+          showReactionWinner(2, timeSinceGreen);
+          roundWon = true;
+          gamePhase = 4;
+        }
       }
 
-      if (millis() - phaseStartTime > 3000) {
+      if (timeSinceGreen > 3000) {
         lcd1.clearBuffer();
         lcd2.clearBuffer();
-        lcd1.setFont(u8g2_font_fur20_tr);
-        lcd2.setFont(u8g2_font_fur20_tr);
-        drawCenteredText(lcd1, 35, "TOO");
-        drawCenteredText(lcd1, 55, "SLOW!");
-        drawCenteredText(lcd2, 35, "TOO");
-        drawCenteredText(lcd2, 55, "SLOW!");
+        lcd1.setFont(u8g2_font_helvB12_tr);
+        lcd2.setFont(u8g2_font_helvB12_tr);
+        drawCenteredInHalf(lcd1, 18, "TOO SLOW!", true);
+        drawCenteredInHalf(lcd2, 18, "TOO SLOW!", true);
+        drawDivider(lcd1);
+        drawDivider(lcd2);
         lcd1.sendBuffer();
         lcd2.sendBuffer();
         setRGB(255, 0, 0);
@@ -349,24 +388,26 @@ void playReactionGame() {
 void handleFalseStart() {
   lcd1.clearBuffer();
   lcd2.clearBuffer();
-  lcd1.setFont(u8g2_font_fur17_tr);
-  lcd2.setFont(u8g2_font_fur17_tr);
-  drawCenteredText(lcd1, 25, "FALSE");
-  drawCenteredText(lcd1, 45, "START!");
-  drawCenteredText(lcd2, 25, "FALSE");
-  drawCenteredText(lcd2, 45, "START!");
+  lcd1.setFont(u8g2_font_helvB10_tr);
+  lcd2.setFont(u8g2_font_helvB10_tr);
 
   if (p1Pressed) {
-    lcd1.setFont(u8g2_font_9x15_tr);
-    drawCenteredText(lcd1, 63, "P1 JUMPED!");
+    drawCenteredInHalf(lcd1, 12, "FALSE", true);
+    drawCenteredInHalf(lcd1, 26, "START!", true);
+    drawCenteredInHalf(lcd2, 12, "P1", false);
+    drawCenteredInHalf(lcd2, 26, "JUMPED!", false);
     if (scoreP1 > 0) scoreP1--;
   }
   if (p2Pressed) {
-    lcd2.setFont(u8g2_font_9x15_tr);
-    drawCenteredText(lcd2, 63, "P2 JUMPED!");
+    drawCenteredInHalf(lcd2, 12, "FALSE", true);
+    drawCenteredInHalf(lcd2, 26, "START!", true);
+    drawCenteredInHalf(lcd1, 12, "P2", false);
+    drawCenteredInHalf(lcd1, 26, "JUMPED!", false);
     if (scoreP2 > 0) scoreP2--;
   }
 
+  drawDivider(lcd1);
+  drawDivider(lcd2);
   lcd1.sendBuffer();
   lcd2.sendBuffer();
   setRGB(255, 0, 0);
@@ -379,33 +420,32 @@ void showReactionWinner(int player, unsigned long reactionTime) {
   lcd1.clearBuffer();
   lcd2.clearBuffer();
 
-  lcd1.setFont(u8g2_font_fur20_tr);
-  lcd2.setFont(u8g2_font_fur20_tr);
+  lcd1.setFont(u8g2_font_helvB10_tr);
+  lcd2.setFont(u8g2_font_helvB10_tr);
 
   if (player == 1) {
-    drawCenteredText(lcd1, 25, "P1 WINS!");
-    drawCenteredText(lcd2, 25, "P1 WINS!");
-    lcd1.setFont(u8g2_font_fur14_tr);
-    lcd2.setFont(u8g2_font_fur14_tr);
-    drawCenteredText(lcd1, 45, winMsg);
-    drawCenteredText(lcd2, 45, loseMsg);
+    drawCenteredInHalf(lcd1, 8, "YOU WIN!", true);
+    drawCenteredInHalf(lcd1, 24, winMsg, true);
+    drawCenteredInHalf(lcd2, 8, "YOU LOSE", true);
+    drawCenteredInHalf(lcd2, 24, loseMsg, true);
     setRGB(0, 255, 0);
   } else {
-    drawCenteredText(lcd1, 25, "P2 WINS!");
-    drawCenteredText(lcd2, 25, "P2 WINS!");
-    lcd1.setFont(u8g2_font_fur14_tr);
-    lcd2.setFont(u8g2_font_fur14_tr);
-    drawCenteredText(lcd1, 45, loseMsg);
-    drawCenteredText(lcd2, 45, winMsg);
+    drawCenteredInHalf(lcd1, 8, "YOU LOSE", true);
+    drawCenteredInHalf(lcd1, 24, loseMsg, true);
+    drawCenteredInHalf(lcd2, 8, "YOU WIN!", true);
+    drawCenteredInHalf(lcd2, 24, winMsg, true);
     setRGB(0, 255, 255);
   }
 
-  lcd1.setFont(u8g2_font_9x15_tr);
-  lcd2.setFont(u8g2_font_9x15_tr);
+  drawDivider(lcd1);
+  drawDivider(lcd2);
+
+  lcd1.setFont(u8g2_font_6x10_tr);
+  lcd2.setFont(u8g2_font_6x10_tr);
   char timeText[16];
-  sprintf(timeText, "%lums", reactionTime);
-  drawCenteredText(lcd1, 63, timeText);
-  drawCenteredText(lcd2, 63, timeText);
+  sprintf(timeText, "Time: %lums", reactionTime);
+  drawCenteredInHalf(lcd1, 12, timeText, false);
+  drawCenteredInHalf(lcd2, 12, timeText, false);
 
   lcd1.sendBuffer();
   lcd2.sendBuffer();
@@ -422,14 +462,16 @@ void playButtonMashGame() {
   if (gamePhase == 0) {
     lcd1.clearBuffer();
     lcd2.clearBuffer();
-    lcd1.setFont(u8g2_font_fur20_tr);
-    lcd2.setFont(u8g2_font_fur20_tr);
-    drawCenteredText(lcd1, 30, "MASH!");
-    drawCenteredText(lcd2, 30, "MASH!");
-    lcd1.setFont(u8g2_font_fur14_tr);
-    lcd2.setFont(u8g2_font_fur14_tr);
-    drawCenteredText(lcd1, 55, "Get ready");
-    drawCenteredText(lcd2, 55, "Get ready");
+    lcd1.setFont(u8g2_font_helvB12_tr);
+    lcd2.setFont(u8g2_font_helvB12_tr);
+    drawCenteredInHalf(lcd1, 18, "MASH!", true);
+    drawCenteredInHalf(lcd2, 18, "MASH!", true);
+    drawDivider(lcd1);
+    drawDivider(lcd2);
+    lcd1.setFont(u8g2_font_6x10_tr);
+    lcd2.setFont(u8g2_font_6x10_tr);
+    drawCenteredInHalf(lcd1, 12, "Get ready...", false);
+    drawCenteredInHalf(lcd2, 12, "Get ready...", false);
     lcd1.sendBuffer();
     lcd2.sendBuffer();
 
@@ -452,30 +494,34 @@ void playButtonMashGame() {
       countP2++;
     }
 
+    // Update displays
     lcd1.clearBuffer();
     lcd2.clearBuffer();
 
-    // Live progress bars
-    int maxCount = max(countP1, countP2);
-    if (maxCount < 10) maxCount = 10;
-    drawProgressBars(lcd1, countP1, countP2, maxCount + 5);
-    drawProgressBars(lcd2, countP1, countP2, maxCount + 5);
+    // Top half - your count
+    lcd1.setFont(u8g2_font_helvB18_tn);
+    lcd2.setFont(u8g2_font_helvB18_tn);
+    char cnt1[8], cnt2[8];
+    sprintf(cnt1, "%d", countP1);
+    sprintf(cnt2, "%d", countP2);
+    drawCenteredInHalf(lcd1, 24, cnt1, true);
+    drawCenteredInHalf(lcd2, 24, cnt2, true);
 
-    // Big numbers
-    lcd1.setFont(u8g2_font_fur30_tn);
-    lcd2.setFont(u8g2_font_fur30_tn);
-    char count1[8], count2[8];
-    sprintf(count1, "%d", countP1);
-    sprintf(count2, "%d", countP2);
-    drawCenteredText(lcd1, 50, count1);
-    drawCenteredText(lcd2, 50, count2);
+    drawDivider(lcd1);
+    drawDivider(lcd2);
 
-    // Time bar at bottom
-    int timeBar = map(elapsed, 0, GAME_DURATION, 120, 0);
-    lcd1.drawFrame(4, 55, 120, 8);
-    lcd1.drawBox(6, 57, timeBar, 4);
-    lcd2.drawFrame(4, 55, 120, 8);
-    lcd2.drawBox(6, 57, timeBar, 4);
+    // Bottom half - opponent count
+    lcd1.setFont(u8g2_font_helvB10_tn);
+    lcd2.setFont(u8g2_font_helvB10_tn);
+    drawCenteredInHalf(lcd1, 18, cnt2, false);
+    drawCenteredInHalf(lcd2, 18, cnt1, false);
+
+    // Time bar
+    int timeBar = map(elapsed, 0, GAME_DURATION, 100, 0);
+    lcd1.drawFrame(14, 50, 100, 6);
+    lcd1.drawBox(16, 52, timeBar, 2);
+    lcd2.drawFrame(14, 50, 100, 6);
+    lcd2.drawBox(16, 52, timeBar, 2);
 
     lcd1.sendBuffer();
     lcd2.sendBuffer();
@@ -485,45 +531,7 @@ void playButtonMashGame() {
     }
   }
   else if (gamePhase == 2) {
-    const char* p1Msg = (countP1 > countP2) ? winMessages[random(WIN_MSG_COUNT)] : loseMessages[random(LOSE_MSG_COUNT)];
-    const char* p2Msg = (countP2 > countP1) ? winMessages[random(WIN_MSG_COUNT)] : loseMessages[random(LOSE_MSG_COUNT)];
-
-    lcd1.clearBuffer();
-    lcd2.clearBuffer();
-
-    lcd1.setFont(u8g2_font_fur20_tr);
-    lcd2.setFont(u8g2_font_fur20_tr);
-
-    if (countP1 > countP2) {
-      scoreP1++;
-      drawCenteredText(lcd1, 22, "P1");
-      drawCenteredText(lcd1, 42, "WINS!");
-      drawCenteredText(lcd2, 22, "P1");
-      drawCenteredText(lcd2, 42, "WINS!");
-      setRGB(0, 255, 0);
-    } else if (countP2 > countP1) {
-      scoreP2++;
-      drawCenteredText(lcd1, 22, "P2");
-      drawCenteredText(lcd1, 42, "WINS!");
-      drawCenteredText(lcd2, 22, "P2");
-      drawCenteredText(lcd2, 42, "WINS!");
-      setRGB(0, 255, 255);
-    } else {
-      drawCenteredText(lcd1, 30, "TIE!");
-      drawCenteredText(lcd2, 30, "TIE!");
-      setRGB(255, 255, 0);
-      p1Msg = "EVEN";
-      p2Msg = "EVEN";
-    }
-
-    lcd1.setFont(u8g2_font_fur11_tr);
-    lcd2.setFont(u8g2_font_fur11_tr);
-    drawCenteredText(lcd1, 58, p1Msg);
-    drawCenteredText(lcd2, 58, p2Msg);
-
-    lcd1.sendBuffer();
-    lcd2.sendBuffer();
-
+    showGameWinner(countP1, countP2, "MASH");
     delay(3000);
     currentRound++;
     if (currentRound > MAX_ROUNDS) {
@@ -539,21 +547,23 @@ void playReflexGame() {
   static unsigned long colorChangeTime = 0;
   static int currentColor = 0;
   static int roundsPlayed = 0;
-  const int COLORS_PER_ROUND = 10;
+  const int COLORS_PER_ROUND = 20; // Longer game
 
   if (gamePhase == 0) {
     lcd1.clearBuffer();
     lcd2.clearBuffer();
-    lcd1.setFont(u8g2_font_fur20_tr);
-    lcd2.setFont(u8g2_font_fur20_tr);
-    drawCenteredText(lcd1, 25, "REFLEX!");
-    drawCenteredText(lcd2, 25, "REFLEX!");
-    lcd1.setFont(u8g2_font_fur11_tr);
-    lcd2.setFont(u8g2_font_fur11_tr);
-    drawCenteredText(lcd1, 42, "Press on");
-    drawCenteredText(lcd2, 42, "Press on");
-    drawCenteredText(lcd1, 58, "GREEN only!");
-    drawCenteredText(lcd2, 58, "GREEN only!");
+    lcd1.setFont(u8g2_font_helvB10_tr);
+    lcd2.setFont(u8g2_font_helvB10_tr);
+    drawCenteredInHalf(lcd1, 10, "REFLEX!", true);
+    drawCenteredInHalf(lcd2, 10, "REFLEX!", true);
+    lcd1.setFont(u8g2_font_6x10_tr);
+    lcd2.setFont(u8g2_font_6x10_tr);
+    drawCenteredInHalf(lcd1, 24, "Press on", true);
+    drawCenteredInHalf(lcd2, 24, "Press on", true);
+    lcd1.drawStr(38, 30, "GREEN only!");
+    lcd2.drawStr(38, 30, "GREEN only!");
+    drawDivider(lcd1);
+    drawDivider(lcd2);
     lcd1.sendBuffer();
     lcd2.sendBuffer();
 
@@ -582,26 +592,32 @@ void playReflexGame() {
       else if (scoreP2 > 0) scoreP2--;
     }
 
+    // Update displays
     lcd1.clearBuffer();
     lcd2.clearBuffer();
 
-    // Progress bars
-    drawProgressBars(lcd1, scoreP1, scoreP2, COLORS_PER_ROUND);
-    drawProgressBars(lcd2, scoreP1, scoreP2, COLORS_PER_ROUND);
-
-    // Big scores
-    lcd1.setFont(u8g2_font_fur30_tn);
-    lcd2.setFont(u8g2_font_fur30_tn);
+    // Top - your score
+    lcd1.setFont(u8g2_font_helvB18_tn);
+    lcd2.setFont(u8g2_font_helvB18_tn);
     char s1[8], s2[8];
     sprintf(s1, "%d", scoreP1);
     sprintf(s2, "%d", scoreP2);
-    drawCenteredText(lcd1, 55, s1);
-    drawCenteredText(lcd2, 55, s2);
+    drawCenteredInHalf(lcd1, 24, s1, true);
+    drawCenteredInHalf(lcd2, 24, s2, true);
+
+    drawDivider(lcd1);
+    drawDivider(lcd2);
+
+    // Bottom - opponent score
+    lcd1.setFont(u8g2_font_helvB10_tn);
+    lcd2.setFont(u8g2_font_helvB10_tn);
+    drawCenteredInHalf(lcd1, 18, s2, false);
+    drawCenteredInHalf(lcd2, 18, s1, false);
 
     lcd1.sendBuffer();
     lcd2.sendBuffer();
 
-    if (millis() - colorChangeTime > random(500, 1500)) {
+    if (millis() - colorChangeTime > random(600, 1200)) {
       roundsPlayed++;
       if (roundsPlayed >= COLORS_PER_ROUND) {
         gamePhase = 3;
@@ -611,35 +627,7 @@ void playReflexGame() {
     }
   }
   else if (gamePhase == 3) {
-    const char* p1Msg = (scoreP1 > scoreP2) ? winMessages[random(WIN_MSG_COUNT)] : loseMessages[random(LOSE_MSG_COUNT)];
-    const char* p2Msg = (scoreP2 > scoreP1) ? winMessages[random(WIN_MSG_COUNT)] : loseMessages[random(LOSE_MSG_COUNT)];
-
-    lcd1.clearBuffer();
-    lcd2.clearBuffer();
-    lcd1.setFont(u8g2_font_fur20_tr);
-    lcd2.setFont(u8g2_font_fur20_tr);
-
-    if (scoreP1 > scoreP2) {
-      drawCenteredText(lcd1, 30, "WIN!");
-      drawCenteredText(lcd2, 30, "LOSE!");
-    } else if (scoreP2 > scoreP1) {
-      drawCenteredText(lcd1, 30, "LOSE!");
-      drawCenteredText(lcd2, 30, "WIN!");
-    } else {
-      drawCenteredText(lcd1, 30, "TIE!");
-      drawCenteredText(lcd2, 30, "TIE!");
-      p1Msg = "EVEN";
-      p2Msg = "EVEN";
-    }
-
-    lcd1.setFont(u8g2_font_fur11_tr);
-    lcd2.setFont(u8g2_font_fur11_tr);
-    drawCenteredText(lcd1, 50, p1Msg);
-    drawCenteredText(lcd2, 50, p2Msg);
-
-    lcd1.sendBuffer();
-    lcd2.sendBuffer();
-
+    showGameWinner(scoreP1, scoreP2, "REFLEX");
     setRGB(255, 255, 255);
     delay(3000);
     currentState = GAME_OVER;
@@ -657,19 +645,20 @@ void playSpeedMatchGame() {
   if (gamePhase == 0) {
     lcd1.clearBuffer();
     lcd2.clearBuffer();
-    lcd1.setFont(u8g2_font_fur17_tr);
-    lcd2.setFont(u8g2_font_fur17_tr);
-    drawCenteredText(lcd1, 25, "SPEED");
-    drawCenteredText(lcd1, 45, "MATCH!");
-    drawCenteredText(lcd2, 25, "SPEED");
-    drawCenteredText(lcd2, 45, "MATCH!");
-
-    lcd1.setFont(u8g2_font_9x15_tr);
-    lcd2.setFont(u8g2_font_9x15_tr);
+    lcd1.setFont(u8g2_font_helvB10_tr);
+    lcd2.setFont(u8g2_font_helvB10_tr);
+    drawCenteredInHalf(lcd1, 10, "SPEED", true);
+    drawCenteredInHalf(lcd1, 24, "MATCH!", true);
+    drawCenteredInHalf(lcd2, 10, "SPEED", true);
+    drawCenteredInHalf(lcd2, 24, "MATCH!", true);
+    drawDivider(lcd1);
+    drawDivider(lcd2);
+    lcd1.setFont(u8g2_font_6x10_tr);
+    lcd2.setFont(u8g2_font_6x10_tr);
     char buf[16];
     sprintf(buf, "Round %d/%d", currentRound, MAX_ROUNDS);
-    drawCenteredText(lcd1, 63, buf);
-    drawCenteredText(lcd2, 63, "Watch!");
+    drawCenteredInHalf(lcd1, 12, buf, false);
+    drawCenteredInHalf(lcd2, 12, buf, false);
     lcd1.sendBuffer();
     lcd2.sendBuffer();
 
@@ -681,6 +670,7 @@ void playSpeedMatchGame() {
     gamePhase = 1;
   }
   else if (gamePhase == 1) {
+    // Show pattern
     for (int i = 0; i < patternLength; i++) {
       int r = random(0, 2) * 255;
       int g = random(0, 2) * 255;
@@ -689,18 +679,20 @@ void playSpeedMatchGame() {
 
       lcd1.clearBuffer();
       lcd2.clearBuffer();
-      lcd1.setFont(u8g2_font_fur30_tn);
-      lcd2.setFont(u8g2_font_fur30_tn);
+      lcd1.setFont(u8g2_font_helvB18_tn);
+      lcd2.setFont(u8g2_font_helvB18_tn);
       char num[4];
       sprintf(num, "%d", i + 1);
-      drawCenteredText(lcd1, 45, num);
-      drawCenteredText(lcd2, 45, num);
+      drawCenteredInHalf(lcd1, 22, num, true);
+      drawCenteredInHalf(lcd2, 22, num, true);
+      drawDivider(lcd1);
+      drawDivider(lcd2);
       lcd1.sendBuffer();
       lcd2.sendBuffer();
 
-      delay(400);
+      delay(500);
       setRGB(0, 0, 0);
-      delay(200);
+      delay(250);
     }
 
     showStartTime = millis();
@@ -715,33 +707,44 @@ void playSpeedMatchGame() {
       p2Presses++;
     }
 
+    // Update displays
     lcd1.clearBuffer();
     lcd2.clearBuffer();
 
-    // Progress bars
-    drawProgressBars(lcd1, p1Presses, p2Presses, patternLength + 2);
-    drawProgressBars(lcd2, p1Presses, p2Presses, patternLength + 2);
-
-    // Target and counts
-    lcd1.setFont(u8g2_font_fur20_tn);
-    lcd2.setFont(u8g2_font_fur20_tn);
-    char target[16];
-    sprintf(target, "=%d", patternLength);
-    drawCenteredText(lcd1, 42, target);
-    drawCenteredText(lcd2, 42, target);
-
-    lcd1.setFont(u8g2_font_fur25_tn);
-    lcd2.setFont(u8g2_font_fur25_tn);
+    // Top - your count
+    lcd1.setFont(u8g2_font_helvB18_tn);
+    lcd2.setFont(u8g2_font_helvB18_tn);
     char cnt1[8], cnt2[8];
     sprintf(cnt1, "%d", p1Presses);
     sprintf(cnt2, "%d", p2Presses);
-    drawCenteredText(lcd1, 63, cnt1);
-    drawCenteredText(lcd2, 63, cnt2);
+    drawCenteredInHalf(lcd1, 22, cnt1, true);
+    drawCenteredInHalf(lcd2, 22, cnt2, true);
+
+    drawDivider(lcd1);
+    drawDivider(lcd2);
+
+    // Bottom - target and opponent
+    lcd1.setFont(u8g2_font_6x10_tr);
+    lcd2.setFont(u8g2_font_6x10_tr);
+    char target[16];
+    sprintf(target, "Goal: %d", patternLength);
+    lcd1.drawStr(4, 44, target);
+    lcd2.drawStr(4, 44, target);
+    sprintf(target, "Them: %d", p2Presses);
+    lcd1.drawStr(4, 56, target);
+    sprintf(target, "Them: %d", p1Presses);
+    lcd2.drawStr(4, 56, target);
 
     lcd1.sendBuffer();
     lcd2.sendBuffer();
 
-    if (p1Presses == patternLength || p2Presses == patternLength || millis() - showStartTime > 5000) {
+    // Win if within 10 clicks, lose if more than 10 behind
+    int p1Diff = abs(p1Presses - patternLength);
+    int p2Diff = abs(p2Presses - patternLength);
+
+    if ((p1Presses == patternLength) || (p2Presses == patternLength) ||
+        (millis() - showStartTime > 10000) ||
+        (p1Diff > 10 && p2Diff > 10)) {
       gamePhase = 3;
     }
   }
@@ -749,48 +752,13 @@ void playSpeedMatchGame() {
     int p1Diff = abs(p1Presses - patternLength);
     int p2Diff = abs(p2Presses - patternLength);
 
-    const char* p1Msg;
-    const char* p2Msg;
-
-    lcd1.clearBuffer();
-    lcd2.clearBuffer();
-    lcd1.setFont(u8g2_font_fur20_tr);
-    lcd2.setFont(u8g2_font_fur20_tr);
-
     if (p1Diff < p2Diff) {
       scoreP1++;
-      drawCenteredText(lcd1, 25, "P1");
-      drawCenteredText(lcd1, 45, "WINS!");
-      drawCenteredText(lcd2, 25, "P1");
-      drawCenteredText(lcd2, 45, "WINS!");
-      p1Msg = winMessages[random(WIN_MSG_COUNT)];
-      p2Msg = loseMessages[random(LOSE_MSG_COUNT)];
-      setRGB(0, 255, 0);
     } else if (p2Diff < p1Diff) {
       scoreP2++;
-      drawCenteredText(lcd1, 25, "P2");
-      drawCenteredText(lcd1, 45, "WINS!");
-      drawCenteredText(lcd2, 25, "P2");
-      drawCenteredText(lcd2, 45, "WINS!");
-      p1Msg = loseMessages[random(LOSE_MSG_COUNT)];
-      p2Msg = winMessages[random(WIN_MSG_COUNT)];
-      setRGB(0, 255, 255);
-    } else {
-      drawCenteredText(lcd1, 30, "TIE!");
-      drawCenteredText(lcd2, 30, "TIE!");
-      p1Msg = "EVEN";
-      p2Msg = "EVEN";
-      setRGB(255, 255, 0);
     }
 
-    lcd1.setFont(u8g2_font_fur11_tr);
-    lcd2.setFont(u8g2_font_fur11_tr);
-    drawCenteredText(lcd1, 63, p1Msg);
-    drawCenteredText(lcd2, 63, p2Msg);
-
-    lcd1.sendBuffer();
-    lcd2.sendBuffer();
-
+    showGameWinner(p1Presses, p2Presses, "SPEED");
     delay(3000);
     currentRound++;
     if (currentRound > MAX_ROUNDS) {
@@ -800,28 +768,78 @@ void playSpeedMatchGame() {
   }
 }
 
-// ============== GAME OVER ==============
-void handleGameOver() {
-  const char* p1Msg = (scoreP1 > scoreP2) ? winMessages[random(WIN_MSG_COUNT)] : loseMessages[random(LOSE_MSG_COUNT)];
-  const char* p2Msg = (scoreP2 > scoreP1) ? winMessages[random(WIN_MSG_COUNT)] : loseMessages[random(LOSE_MSG_COUNT)];
+void showGameWinner(int val1, int val2, const char* game) {
+  const char* p1Msg = (val1 > val2) ? winMessages[random(WIN_MSG_COUNT)] :
+                      (val1 < val2) ? loseMessages[random(LOSE_MSG_COUNT)] : "TIE";
+  const char* p2Msg = (val2 > val1) ? winMessages[random(WIN_MSG_COUNT)] :
+                      (val2 < val1) ? loseMessages[random(LOSE_MSG_COUNT)] : "TIE";
 
   lcd1.clearBuffer();
   lcd2.clearBuffer();
 
-  lcd1.setFont(u8g2_font_fur20_tr);
-  lcd2.setFont(u8g2_font_fur20_tr);
-  drawCenteredText(lcd1, 22, "GAME");
-  drawCenteredText(lcd1, 42, "OVER!");
-  drawCenteredText(lcd2, 22, "GAME");
-  drawCenteredText(lcd2, 42, "OVER!");
+  lcd1.setFont(u8g2_font_helvB10_tr);
+  lcd2.setFont(u8g2_font_helvB10_tr);
 
-  lcd1.setFont(u8g2_font_fur17_tn);
-  lcd2.setFont(u8g2_font_fur17_tn);
-  char s1[16], s2[16];
-  sprintf(s1, "P1:%d", scoreP1);
-  sprintf(s2, "P2:%d", scoreP2);
-  drawCenteredText(lcd1, 60, s1);
-  drawCenteredText(lcd2, 60, s2);
+  if (val1 > val2) {
+    scoreP1++;
+    drawCenteredInHalf(lcd1, 12, "YOU WIN!", true);
+    drawCenteredInHalf(lcd2, 12, "YOU LOSE", true);
+    setRGB(0, 255, 0);
+  } else if (val2 > val1) {
+    scoreP2++;
+    drawCenteredInHalf(lcd1, 12, "YOU LOSE", true);
+    drawCenteredInHalf(lcd2, 12, "YOU WIN!", true);
+    setRGB(0, 255, 255);
+  } else {
+    drawCenteredInHalf(lcd1, 12, "TIE!", true);
+    drawCenteredInHalf(lcd2, 12, "TIE!", true);
+    setRGB(255, 255, 0);
+  }
+
+  lcd1.setFont(u8g2_font_6x10_tr);
+  lcd2.setFont(u8g2_font_6x10_tr);
+  drawCenteredInHalf(lcd1, 26, p1Msg, true);
+  drawCenteredInHalf(lcd2, 26, p2Msg, true);
+
+  drawDivider(lcd1);
+  drawDivider(lcd2);
+
+  char score[16];
+  sprintf(score, "You: %d", val1);
+  lcd1.drawStr(4, 44, score);
+  sprintf(score, "Them: %d", val2);
+  lcd1.drawStr(4, 56, score);
+
+  sprintf(score, "You: %d", val2);
+  lcd2.drawStr(4, 44, score);
+  sprintf(score, "Them: %d", val1);
+  lcd2.drawStr(4, 56, score);
+
+  lcd1.sendBuffer();
+  lcd2.sendBuffer();
+}
+
+// ============== GAME OVER ==============
+void handleGameOver() {
+  const char* p1Msg = (scoreP1 > scoreP2) ? winMessages[random(WIN_MSG_COUNT)] :
+                      (scoreP1 < scoreP2) ? loseMessages[random(LOSE_MSG_COUNT)] : "TIE GAME";
+  const char* p2Msg = (scoreP2 > scoreP1) ? winMessages[random(WIN_MSG_COUNT)] :
+                      (scoreP2 < scoreP1) ? loseMessages[random(LOSE_MSG_COUNT)] : "TIE GAME";
+
+  lcd1.clearBuffer();
+  lcd2.clearBuffer();
+
+  lcd1.setFont(u8g2_font_helvB12_tr);
+  lcd2.setFont(u8g2_font_helvB12_tr);
+  drawCenteredInHalf(lcd1, 18, "GAME", true);
+  drawCenteredInHalf(lcd2, 18, "GAME", true);
+  lcd1.setFont(u8g2_font_helvB10_tr);
+  lcd2.setFont(u8g2_font_helvB10_tr);
+  drawCenteredInHalf(lcd1, 30, "OVER!", true);
+  drawCenteredInHalf(lcd2, 30, "OVER!", true);
+
+  drawDivider(lcd1);
+  drawDivider(lcd2);
 
   if (scoreP1 > scoreP2) {
     setRGB(0, 255, 0);
@@ -829,22 +847,35 @@ void handleGameOver() {
     setRGB(0, 255, 255);
   } else {
     setRGB(255, 255, 0);
-    p1Msg = "TIE GAME";
-    p2Msg = "TIE GAME";
   }
+
+  lcd1.setFont(u8g2_font_6x10_tr);
+  lcd2.setFont(u8g2_font_6x10_tr);
+  char s[16];
+  sprintf(s, "You: %d", scoreP1);
+  lcd1.drawStr(4, 44, s);
+  sprintf(s, "Them: %d", scoreP2);
+  lcd1.drawStr(4, 56, s);
+
+  sprintf(s, "You: %d", scoreP2);
+  lcd2.drawStr(4, 44, s);
+  sprintf(s, "Them: %d", scoreP1);
+  lcd2.drawStr(4, 56, s);
 
   lcd1.sendBuffer();
   lcd2.sendBuffer();
 
   delay(2000);
 
-  // Show feedback
+  // Show final feedback
   lcd1.clearBuffer();
   lcd2.clearBuffer();
-  lcd1.setFont(u8g2_font_fur14_tr);
-  lcd2.setFont(u8g2_font_fur14_tr);
-  drawCenteredText(lcd1, 35, p1Msg);
-  drawCenteredText(lcd2, 35, p2Msg);
+  lcd1.setFont(u8g2_font_helvB10_tr);
+  lcd2.setFont(u8g2_font_helvB10_tr);
+  drawCenteredInHalf(lcd1, 18, p1Msg, true);
+  drawCenteredInHalf(lcd2, 18, p2Msg, true);
+  drawDivider(lcd1);
+  drawDivider(lcd2);
   lcd1.sendBuffer();
   lcd2.sendBuffer();
 
