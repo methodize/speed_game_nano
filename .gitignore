@@ -1,0 +1,24 @@
+# Arduino build files
+build/
+*.elf
+*.hex
+*.bin
+
+# Arduino IDE
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Compiled Object files
+*.o
+*.obj
+
+# Libraries (if you want to track them, remove these lines)
+# libraries/
+
+# Build artifacts
+*.eep
+*.lss
+*.map
+*.sym
