@@ -67,6 +67,7 @@ enum GameState {
 GameState currentState = MENU;
 
 const int MENU_ITEMS = 4;
+const char* menuItems[MENU_ITEMS] = {"Reaction", "Button Mash", "Reflex", "Speed Match"};
 int selectedMenuItem = 0;
 unsigned long menuStartTime = 0;
 const unsigned long MENU_TIMEOUT = 10000;
@@ -78,6 +79,8 @@ const unsigned long DEBOUNCE_DELAY = 50;
 const unsigned long DOUBLE_CLICK_TIME = 400;
 bool p1Pressed = false;
 bool p2Pressed = false;
+bool p1NewPress = false;  // Flag for new button press
+bool p2NewPress = false;  // Flag for new button press
 
 int scoreP1 = 0;
 int scoreP2 = 0;
@@ -164,15 +167,23 @@ void readButtons() {
   bool p2State = digitalRead(BUTTON_P2) == LOW;
   unsigned long now = millis();
 
+  // Clear new press flags from previous loop
+  p1NewPress = false;
+  p2NewPress = false;
+
+  // Player 1 button edge detection
   if (p1State && !p1Pressed && (now - lastP1Press > DEBOUNCE_DELAY)) {
     p1Pressed = true;
+    p1NewPress = true;  // Set flag for NEW press only
     lastP1Press = now;
   } else if (!p1State && p1Pressed) {
     p1Pressed = false;
   }
 
+  // Player 2 button edge detection
   if (p2State && !p2Pressed && (now - lastP2Press > DEBOUNCE_DELAY)) {
     p2Pressed = true;
+    p2NewPress = true;  // Set flag for NEW press only
     lastP2Press = now;
   } else if (!p2State && p2Pressed) {
     p2Pressed = false;
@@ -180,8 +191,6 @@ void readButtons() {
 }
 
 void showMenu() {
-  const char* menuItems[MENU_ITEMS] = {"Reaction", "Button Mash", "Reflex", "Speed Match"};
-
   lcd1.clearBuffer();
   lcd1.setFont(u8g2_font_6x12_tr);
   lcd1.drawStr(0, 8, "SELECT:");
@@ -237,7 +246,7 @@ void handleMenu() {
     lcd2.sendBuffer();
   }
 
-  if (p1Pressed && (now - lastP1Press < DEBOUNCE_DELAY + 10)) {
+  if (p1NewPress) {
     if (now - lastP1Click < DOUBLE_CLICK_TIME) {
       startSelectedGame();
       lastP1Click = 0;
@@ -318,8 +327,8 @@ void playReactionGame() {
       setRGB(255, 255, 0);
       phaseStartTime = millis();
       gamePhase = 2;
-    }
-    if (p1Pressed || p2Pressed) {
+    } else if (p1NewPress || p2NewPress) {
+      // Only check for false start if we haven't changed phase yet
       handleFalseStart();
       gamePhase = 4;
     }
@@ -329,34 +338,30 @@ void playReactionGame() {
     if (millis() - phaseStartTime > random(800, 1500)) {
       setRGB(0, 255, 0);
       greenLightTime = millis();
-      greenLightActive = true; // Flag that green is NOW active
+      greenLightActive = true;
       gamePhase = 3;
-      delay(10); // Small delay to ensure green is SET before checking buttons
-    }
-    if (p1Pressed || p2Pressed) {
+    } else if (p1NewPress || p2NewPress) {
+      // Only check for false start if we haven't gone green yet
       handleFalseStart();
       gamePhase = 4;
     }
   }
   else if (gamePhase == 3) {
-    // Green light - ONLY check buttons if green is active AND some time has passed
+    // Green light - check for new button presses
     if (!roundWon && greenLightActive) {
       unsigned long timeSinceGreen = millis() - greenLightTime;
 
-      // Only start accepting presses after 50ms to avoid false triggers
-      if (timeSinceGreen > 50) {
-        if (p1Pressed && (millis() - lastP1Press < 100)) {
-          scoreP1++;
-          showReactionWinner(1, timeSinceGreen);
-          roundWon = true;
-          gamePhase = 4;
-        }
-        else if (p2Pressed && (millis() - lastP2Press < 100)) {
-          scoreP2++;
-          showReactionWinner(2, timeSinceGreen);
-          roundWon = true;
-          gamePhase = 4;
-        }
+      if (p1NewPress) {
+        scoreP1++;
+        showReactionWinner(1);
+        roundWon = true;
+        gamePhase = 4;
+      }
+      else if (p2NewPress) {
+        scoreP2++;
+        showReactionWinner(2);
+        roundWon = true;
+        gamePhase = 4;
       }
 
       if (timeSinceGreen > 3000) {
@@ -391,14 +396,14 @@ void handleFalseStart() {
   lcd1.setFont(u8g2_font_helvB10_tr);
   lcd2.setFont(u8g2_font_helvB10_tr);
 
-  if (p1Pressed) {
+  if (p1NewPress) {
     drawCenteredInHalf(lcd1, 12, "FALSE", true);
     drawCenteredInHalf(lcd1, 26, "START!", true);
     drawCenteredInHalf(lcd2, 12, "P1", false);
     drawCenteredInHalf(lcd2, 26, "JUMPED!", false);
     if (scoreP1 > 0) scoreP1--;
   }
-  if (p2Pressed) {
+  if (p2NewPress) {
     drawCenteredInHalf(lcd2, 12, "FALSE", true);
     drawCenteredInHalf(lcd2, 26, "START!", true);
     drawCenteredInHalf(lcd1, 12, "P2", false);
@@ -413,7 +418,7 @@ void handleFalseStart() {
   setRGB(255, 0, 0);
 }
 
-void showReactionWinner(int player, unsigned long reactionTime) {
+void showReactionWinner(int player) {
   const char* winMsg = winMessages[random(WIN_MSG_COUNT)];
   const char* loseMsg = loseMessages[random(LOSE_MSG_COUNT)];
 
@@ -440,12 +445,13 @@ void showReactionWinner(int player, unsigned long reactionTime) {
   drawDivider(lcd1);
   drawDivider(lcd2);
 
+  // Show current scores
   lcd1.setFont(u8g2_font_6x10_tr);
   lcd2.setFont(u8g2_font_6x10_tr);
-  char timeText[16];
-  sprintf(timeText, "Time: %lums", reactionTime);
-  drawCenteredInHalf(lcd1, 12, timeText, false);
-  drawCenteredInHalf(lcd2, 12, timeText, false);
+  char scoreText[16];
+  sprintf(scoreText, "Score: %d-%d", scoreP1, scoreP2);
+  drawCenteredInHalf(lcd1, 12, scoreText, false);
+  drawCenteredInHalf(lcd2, 12, scoreText, false);
 
   lcd1.sendBuffer();
   lcd2.sendBuffer();
@@ -487,44 +493,49 @@ void playButtonMashGame() {
   else if (gamePhase == 1) {
     unsigned long elapsed = millis() - gameStartTime;
 
-    if (p1Pressed && (millis() - lastP1Press < 100)) {
+    if (p1NewPress) {
       countP1++;
     }
-    if (p2Pressed && (millis() - lastP2Press < 100)) {
+    if (p2NewPress) {
       countP2++;
     }
 
-    // Update displays
-    lcd1.clearBuffer();
-    lcd2.clearBuffer();
+    // Update displays only every 50ms to reduce flicker
+    static unsigned long lastUpdate = 0;
+    if (millis() - lastUpdate > 50) {
+      lastUpdate = millis();
 
-    // Top half - your count
-    lcd1.setFont(u8g2_font_helvB18_tn);
-    lcd2.setFont(u8g2_font_helvB18_tn);
-    char cnt1[8], cnt2[8];
-    sprintf(cnt1, "%d", countP1);
-    sprintf(cnt2, "%d", countP2);
-    drawCenteredInHalf(lcd1, 24, cnt1, true);
-    drawCenteredInHalf(lcd2, 24, cnt2, true);
+      lcd1.clearBuffer();
+      lcd2.clearBuffer();
 
-    drawDivider(lcd1);
-    drawDivider(lcd2);
+      // Top half - your count (use 3-digit padding to prevent artifacts)
+      lcd1.setFont(u8g2_font_helvB18_tn);
+      lcd2.setFont(u8g2_font_helvB18_tn);
+      char cnt1[8], cnt2[8];
+      sprintf(cnt1, "%3d", countP1);  // Right-aligned with padding
+      sprintf(cnt2, "%3d", countP2);
+      drawCenteredInHalf(lcd1, 24, cnt1, true);
+      drawCenteredInHalf(lcd2, 24, cnt2, true);
 
-    // Bottom half - opponent count
-    lcd1.setFont(u8g2_font_helvB10_tn);
-    lcd2.setFont(u8g2_font_helvB10_tn);
-    drawCenteredInHalf(lcd1, 18, cnt2, false);
-    drawCenteredInHalf(lcd2, 18, cnt1, false);
+      drawDivider(lcd1);
+      drawDivider(lcd2);
 
-    // Time bar
-    int timeBar = map(elapsed, 0, GAME_DURATION, 100, 0);
-    lcd1.drawFrame(14, 50, 100, 6);
-    lcd1.drawBox(16, 52, timeBar, 2);
-    lcd2.drawFrame(14, 50, 100, 6);
-    lcd2.drawBox(16, 52, timeBar, 2);
+      // Bottom half - opponent count
+      lcd1.setFont(u8g2_font_helvB10_tn);
+      lcd2.setFont(u8g2_font_helvB10_tn);
+      drawCenteredInHalf(lcd1, 18, cnt2, false);
+      drawCenteredInHalf(lcd2, 18, cnt1, false);
 
-    lcd1.sendBuffer();
-    lcd2.sendBuffer();
+      // Time bar
+      int timeBar = map(elapsed, 0, GAME_DURATION, 100, 0);
+      lcd1.drawFrame(14, 50, 100, 6);
+      lcd1.drawBox(16, 52, timeBar, 2);
+      lcd2.drawFrame(14, 50, 100, 6);
+      lcd2.drawBox(16, 52, timeBar, 2);
+
+      lcd1.sendBuffer();
+      lcd2.sendBuffer();
+    }
 
     if (elapsed >= GAME_DURATION) {
       gamePhase = 2;
@@ -582,40 +593,45 @@ void playReflexGame() {
     gamePhase = 2;
   }
   else if (gamePhase == 2) {
-    if (p1Pressed && (millis() - lastP1Press < 100)) {
+    if (p1NewPress) {
       if (currentColor == 1) scoreP1++;
       else if (scoreP1 > 0) scoreP1--;
     }
 
-    if (p2Pressed && (millis() - lastP2Press < 100)) {
+    if (p2NewPress) {
       if (currentColor == 1) scoreP2++;
       else if (scoreP2 > 0) scoreP2--;
     }
 
-    // Update displays
-    lcd1.clearBuffer();
-    lcd2.clearBuffer();
+    // Update displays every 100ms
+    static unsigned long lastUpdate = 0;
+    if (millis() - lastUpdate > 100 || p1NewPress || p2NewPress) {
+      lastUpdate = millis();
 
-    // Top - your score
-    lcd1.setFont(u8g2_font_helvB18_tn);
-    lcd2.setFont(u8g2_font_helvB18_tn);
-    char s1[8], s2[8];
-    sprintf(s1, "%d", scoreP1);
-    sprintf(s2, "%d", scoreP2);
-    drawCenteredInHalf(lcd1, 24, s1, true);
-    drawCenteredInHalf(lcd2, 24, s2, true);
+      lcd1.clearBuffer();
+      lcd2.clearBuffer();
 
-    drawDivider(lcd1);
-    drawDivider(lcd2);
+      // Top - your score (use padding to prevent artifacts)
+      lcd1.setFont(u8g2_font_helvB18_tn);
+      lcd2.setFont(u8g2_font_helvB18_tn);
+      char s1[8], s2[8];
+      sprintf(s1, "%3d", scoreP1);  // 3-digit padding
+      sprintf(s2, "%3d", scoreP2);
+      drawCenteredInHalf(lcd1, 24, s1, true);
+      drawCenteredInHalf(lcd2, 24, s2, true);
 
-    // Bottom - opponent score
-    lcd1.setFont(u8g2_font_helvB10_tn);
-    lcd2.setFont(u8g2_font_helvB10_tn);
-    drawCenteredInHalf(lcd1, 18, s2, false);
-    drawCenteredInHalf(lcd2, 18, s1, false);
+      drawDivider(lcd1);
+      drawDivider(lcd2);
 
-    lcd1.sendBuffer();
-    lcd2.sendBuffer();
+      // Bottom - opponent score
+      lcd1.setFont(u8g2_font_helvB10_tn);
+      lcd2.setFont(u8g2_font_helvB10_tn);
+      drawCenteredInHalf(lcd1, 18, s2, false);
+      drawCenteredInHalf(lcd2, 18, s1, false);
+
+      lcd1.sendBuffer();
+      lcd2.sendBuffer();
+    }
 
     if (millis() - colorChangeTime > random(600, 1200)) {
       roundsPlayed++;
@@ -700,43 +716,48 @@ void playSpeedMatchGame() {
     setRGB(0, 255, 0);
   }
   else if (gamePhase == 2) {
-    if (p1Pressed && (millis() - lastP1Press < 100)) {
+    if (p1NewPress) {
       p1Presses++;
     }
-    if (p2Pressed && (millis() - lastP2Press < 100)) {
+    if (p2NewPress) {
       p2Presses++;
     }
 
-    // Update displays
-    lcd1.clearBuffer();
-    lcd2.clearBuffer();
+    // Update displays every 50ms or on button press
+    static unsigned long lastUpdate = 0;
+    if (millis() - lastUpdate > 50 || p1NewPress || p2NewPress) {
+      lastUpdate = millis();
 
-    // Top - your count
-    lcd1.setFont(u8g2_font_helvB18_tn);
-    lcd2.setFont(u8g2_font_helvB18_tn);
-    char cnt1[8], cnt2[8];
-    sprintf(cnt1, "%d", p1Presses);
-    sprintf(cnt2, "%d", p2Presses);
-    drawCenteredInHalf(lcd1, 22, cnt1, true);
-    drawCenteredInHalf(lcd2, 22, cnt2, true);
+      lcd1.clearBuffer();
+      lcd2.clearBuffer();
 
-    drawDivider(lcd1);
-    drawDivider(lcd2);
+      // Top - your count (use padding)
+      lcd1.setFont(u8g2_font_helvB18_tn);
+      lcd2.setFont(u8g2_font_helvB18_tn);
+      char cnt1[8], cnt2[8];
+      sprintf(cnt1, "%3d", p1Presses);  // 3-digit padding
+      sprintf(cnt2, "%3d", p2Presses);
+      drawCenteredInHalf(lcd1, 22, cnt1, true);
+      drawCenteredInHalf(lcd2, 22, cnt2, true);
 
-    // Bottom - target and opponent
-    lcd1.setFont(u8g2_font_6x10_tr);
-    lcd2.setFont(u8g2_font_6x10_tr);
-    char target[16];
-    sprintf(target, "Goal: %d", patternLength);
-    lcd1.drawStr(4, 44, target);
-    lcd2.drawStr(4, 44, target);
-    sprintf(target, "Them: %d", p2Presses);
-    lcd1.drawStr(4, 56, target);
-    sprintf(target, "Them: %d", p1Presses);
-    lcd2.drawStr(4, 56, target);
+      drawDivider(lcd1);
+      drawDivider(lcd2);
 
-    lcd1.sendBuffer();
-    lcd2.sendBuffer();
+      // Bottom - target and opponent
+      lcd1.setFont(u8g2_font_6x10_tr);
+      lcd2.setFont(u8g2_font_6x10_tr);
+      char target[16];
+      sprintf(target, "Goal: %2d", patternLength);
+      lcd1.drawStr(4, 44, target);
+      lcd2.drawStr(4, 44, target);
+      sprintf(target, "Them: %2d", p2Presses);
+      lcd1.drawStr(4, 56, target);
+      sprintf(target, "Them: %2d", p1Presses);
+      lcd2.drawStr(4, 56, target);
+
+      lcd1.sendBuffer();
+      lcd2.sendBuffer();
+    }
 
     // Win if within 10 clicks, lose if more than 10 behind
     int p1Diff = abs(p1Presses - patternLength);
