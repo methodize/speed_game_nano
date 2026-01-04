@@ -393,21 +393,21 @@ void playReactionGame() {
 void handleFalseStart() {
   lcd1.clearBuffer();
   lcd2.clearBuffer();
-  lcd1.setFont(u8g2_font_helvB10_tr);
-  lcd2.setFont(u8g2_font_helvB10_tr);
+  lcd1.setFont(u8g2_font_6x10_tr);
+  lcd2.setFont(u8g2_font_6x10_tr);
 
   if (p1NewPress) {
-    drawCenteredInHalf(lcd1, 12, "FALSE", true);
-    drawCenteredInHalf(lcd1, 26, "START!", true);
-    drawCenteredInHalf(lcd2, 12, "P1", false);
-    drawCenteredInHalf(lcd2, 26, "JUMPED!", false);
+    drawCenteredInHalf(lcd1, 8, "FALSE", true);
+    drawCenteredInHalf(lcd1, 20, "START!", true);
+    drawCenteredInHalf(lcd2, 8, "P1", false);
+    drawCenteredInHalf(lcd2, 20, "JUMPED!", false);
     if (scoreP1 > 0) scoreP1--;
   }
   if (p2NewPress) {
-    drawCenteredInHalf(lcd2, 12, "FALSE", true);
-    drawCenteredInHalf(lcd2, 26, "START!", true);
-    drawCenteredInHalf(lcd1, 12, "P2", false);
-    drawCenteredInHalf(lcd1, 26, "JUMPED!", false);
+    drawCenteredInHalf(lcd2, 8, "FALSE", true);
+    drawCenteredInHalf(lcd2, 20, "START!", true);
+    drawCenteredInHalf(lcd1, 8, "P2", false);
+    drawCenteredInHalf(lcd1, 20, "JUMPED!", false);
     if (scoreP2 > 0) scoreP2--;
   }
 
@@ -425,20 +425,20 @@ void showReactionWinner(int player) {
   lcd1.clearBuffer();
   lcd2.clearBuffer();
 
-  lcd1.setFont(u8g2_font_helvB10_tr);
-  lcd2.setFont(u8g2_font_helvB10_tr);
+  lcd1.setFont(u8g2_font_6x10_tr);
+  lcd2.setFont(u8g2_font_6x10_tr);
 
   if (player == 1) {
     drawCenteredInHalf(lcd1, 8, "YOU WIN!", true);
-    drawCenteredInHalf(lcd1, 24, winMsg, true);
+    drawCenteredInHalf(lcd1, 20, winMsg, true);
     drawCenteredInHalf(lcd2, 8, "YOU LOSE", true);
-    drawCenteredInHalf(lcd2, 24, loseMsg, true);
+    drawCenteredInHalf(lcd2, 20, loseMsg, true);
     setRGB(0, 255, 0);
   } else {
     drawCenteredInHalf(lcd1, 8, "YOU LOSE", true);
-    drawCenteredInHalf(lcd1, 24, loseMsg, true);
+    drawCenteredInHalf(lcd1, 20, loseMsg, true);
     drawCenteredInHalf(lcd2, 8, "YOU WIN!", true);
-    drawCenteredInHalf(lcd2, 24, winMsg, true);
+    drawCenteredInHalf(lcd2, 20, winMsg, true);
     setRGB(0, 255, 255);
   }
 
@@ -446,8 +446,6 @@ void showReactionWinner(int player) {
   drawDivider(lcd2);
 
   // Show current scores
-  lcd1.setFont(u8g2_font_6x10_tr);
-  lcd2.setFont(u8g2_font_6x10_tr);
   char scoreText[16];
   sprintf(scoreText, "Score: %d-%d", scoreP1, scoreP2);
   drawCenteredInHalf(lcd1, 12, scoreText, false);
@@ -798,29 +796,30 @@ void showGameWinner(int val1, int val2, const char* game) {
   lcd1.clearBuffer();
   lcd2.clearBuffer();
 
-  lcd1.setFont(u8g2_font_helvB10_tr);
-  lcd2.setFont(u8g2_font_helvB10_tr);
+  lcd1.setFont(u8g2_font_6x10_tr);
+  lcd2.setFont(u8g2_font_6x10_tr);
 
   if (val1 > val2) {
     scoreP1++;
-    drawCenteredInHalf(lcd1, 12, "YOU WIN!", true);
-    drawCenteredInHalf(lcd2, 12, "YOU LOSE", true);
+    drawCenteredInHalf(lcd1, 8, "YOU WIN!", true);
+    drawCenteredInHalf(lcd1, 20, p1Msg, true);
+    drawCenteredInHalf(lcd2, 8, "YOU LOSE", true);
+    drawCenteredInHalf(lcd2, 20, p2Msg, true);
     setRGB(0, 255, 0);
   } else if (val2 > val1) {
     scoreP2++;
-    drawCenteredInHalf(lcd1, 12, "YOU LOSE", true);
-    drawCenteredInHalf(lcd2, 12, "YOU WIN!", true);
+    drawCenteredInHalf(lcd1, 8, "YOU LOSE", true);
+    drawCenteredInHalf(lcd1, 20, p1Msg, true);
+    drawCenteredInHalf(lcd2, 8, "YOU WIN!", true);
+    drawCenteredInHalf(lcd2, 20, p2Msg, true);
     setRGB(0, 255, 255);
   } else {
-    drawCenteredInHalf(lcd1, 12, "TIE!", true);
-    drawCenteredInHalf(lcd2, 12, "TIE!", true);
+    drawCenteredInHalf(lcd1, 8, "TIE!", true);
+    drawCenteredInHalf(lcd1, 20, p1Msg, true);
+    drawCenteredInHalf(lcd2, 8, "TIE!", true);
+    drawCenteredInHalf(lcd2, 20, p2Msg, true);
     setRGB(255, 255, 0);
   }
-
-  lcd1.setFont(u8g2_font_6x10_tr);
-  lcd2.setFont(u8g2_font_6x10_tr);
-  drawCenteredInHalf(lcd1, 26, p1Msg, true);
-  drawCenteredInHalf(lcd2, 26, p2Msg, true);
 
   drawDivider(lcd1);
   drawDivider(lcd2);
@@ -850,14 +849,12 @@ void handleGameOver() {
   lcd1.clearBuffer();
   lcd2.clearBuffer();
 
-  lcd1.setFont(u8g2_font_helvB12_tr);
-  lcd2.setFont(u8g2_font_helvB12_tr);
-  drawCenteredInHalf(lcd1, 18, "GAME", true);
-  drawCenteredInHalf(lcd2, 18, "GAME", true);
-  lcd1.setFont(u8g2_font_helvB10_tr);
-  lcd2.setFont(u8g2_font_helvB10_tr);
-  drawCenteredInHalf(lcd1, 30, "OVER!", true);
-  drawCenteredInHalf(lcd2, 30, "OVER!", true);
+  lcd1.setFont(u8g2_font_6x10_tr);
+  lcd2.setFont(u8g2_font_6x10_tr);
+  drawCenteredInHalf(lcd1, 8, "GAME", true);
+  drawCenteredInHalf(lcd1, 20, "OVER!", true);
+  drawCenteredInHalf(lcd2, 8, "GAME", true);
+  drawCenteredInHalf(lcd2, 20, "OVER!", true);
 
   drawDivider(lcd1);
   drawDivider(lcd2);
@@ -870,8 +867,6 @@ void handleGameOver() {
     setRGB(255, 255, 0);
   }
 
-  lcd1.setFont(u8g2_font_6x10_tr);
-  lcd2.setFont(u8g2_font_6x10_tr);
   char s[16];
   sprintf(s, "You: %d", scoreP1);
   lcd1.drawStr(4, 44, s);
@@ -891,8 +886,6 @@ void handleGameOver() {
   // Show final feedback
   lcd1.clearBuffer();
   lcd2.clearBuffer();
-  lcd1.setFont(u8g2_font_helvB10_tr);
-  lcd2.setFont(u8g2_font_helvB10_tr);
   drawCenteredInHalf(lcd1, 18, p1Msg, true);
   drawCenteredInHalf(lcd2, 18, p2Msg, true);
   drawDivider(lcd1);
